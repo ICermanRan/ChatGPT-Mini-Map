@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChatGPT 小地图</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header><img src="icons/icon48.png" width="36" height="36" alt=""><div><h1>ChatGPT 小地图</h1><p>长对话，也能轻松找到方向</p></div></header>
+  <div class="status"><span class="dot"></span><span id="status" role="status">正在连接当前页面…</span></div>
+  <button id="toggle" type="button" disabled>打开 / 收起小地图</button>
+  <p class="hint">在 ChatGPT 对话中使用<br><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> 快速开关</p>
+  <footer>本地运行 · 不上传对话 · 无需 API Key</footer>
+  <script src="popup.js"></script>
+</body>
+</html>

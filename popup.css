@@ -1,0 +1,16 @@
+:root { color-scheme: light dark; font: 14px/1.65 "Segoe UI", "Microsoft YaHei", sans-serif; color: #272b38; background: #fff; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 25px; width: 350px; }
+header { display: flex; align-items: center; gap: 13px; }
+h1 { font-size: 19px; line-height: 1.4; margin: 0 0 4px; letter-spacing: -.4px; }
+p { margin: 0; color: #7d8594; font-size: 12px; }
+.status { display: flex; gap: 9px; align-items: center; margin: 24px 0 15px; padding: 13px; border: 1px solid #e9ebf0; background: #f8f9fb; border-radius: 11px; font-size: 13px; }
+.dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: #28886a; box-shadow: 0 0 0 3px #28886a12; }
+button { width: 100%; cursor: pointer; font: inherit; font-weight: 600; background: #587747; color: white; padding: 12px; border: 0; border-radius: 10px; }
+button:hover { background: #49673a; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible { outline: 3px solid #bbd49f; outline-offset: 3px; }
+.hint { text-align: center; margin: 17px 0 23px; line-height: 2.1; }
+kbd { background: #f5f5fa; color: #636b7b; border: 1px solid #e5e7ed; border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; font: 11px "Segoe UI", sans-serif; }
+footer { font-size: 11px; color: #8b93a2; text-align: center; border-top: 1px solid #eceef3; padding-top: 14px; }
+@media(prefers-color-scheme: dark) { :root { color: #eceef5; background: #202221; } .status { background: #2a2d2b; border-color: #373d38; } p,footer { color: #a6afc0; } footer { border-color: #373d38; } kbd { background: #30333e; color: #c7cfdf; border-color: #484d5c; } button { background: #719455; } button:hover { background: #83a268; } }
