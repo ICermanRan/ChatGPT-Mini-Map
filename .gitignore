@@ -1,0 +1,22 @@
+# Local dependencies and generated packages
+node_modules/
+dist/
+*.zip
+
+# Scratch files, browser test profiles and reports
+work/
+outputs/
+edge-*/
+test-results/
+playwright-report/
+*.log
+
+# Local settings
+.env
+.env.*
+!.env.example
+.codex/
+.agents/
+.DS_Store
+Thumbs.db
+Desktop.ini
