@@ -5,6 +5,10 @@
   // ChatGPT's website response is an internal format and can change independently.
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 
+  function contentKind(part) {
+    return String(part?.content_type || part?.type || part?.mime_type || '').toLowerCase();
+  }
+
   function readablePart(part, depth = 0) {
     if (typeof part === 'string') return part;
     if (!part || typeof part !== 'object' || depth > 20) return '';
@@ -19,6 +23,37 @@
     if (/video/.test(kind)) return '[视频]';
     if (/file/.test(kind)) return `[文件${part.name || part.filename ? `：${part.name || part.filename}` : ''}]`;
     return kind ? `[${kind} 内容]` : '';
+  }
+
+  // The API content can contain image/file objects beside the actual question.
+  // Keep those objects in the display text, but never use their synthesized
+  // labels as the only body anchor for a question that also has real text.
+  function bodyPart(part, depth = 0) {
+    if (typeof part === 'string') return part;
+    if (!part || typeof part !== 'object' || depth > 20) return '';
+    if (Array.isArray(part.parts)) return part.parts.map(item => bodyPart(item, depth + 1)).filter(Boolean).join('\n');
+    for (const key of ['text', 'transcription', 'transcript']) {
+      if (typeof part[key] === 'string') return part[key];
+      if (part[key] && typeof part[key] === 'object') return bodyPart(part[key], depth + 1);
+    }
+    return '';
+  }
+
+  function attachmentInfo(message) {
+    const output = [];
+    const add = value => {
+      if (!value || typeof value !== 'object') return;
+      const kind = contentKind(value).replace(/^application\//, '');
+      const name = value.name || value.filename || value.file_name;
+      const item = {kind: kind || 'attachment'};
+      if (typeof name === 'string' && name.trim()) item.name = name.trim().slice(0, 240);
+      const key = `${item.kind}:${item.name || ''}`;
+      if (!output.some(old => `${old.kind}:${old.name || ''}` === key)) output.push(item);
+    };
+    for (const item of Array.isArray(message?.metadata?.attachments) ? message.metadata.attachments : []) add(item);
+    const parts = message?.content?.parts;
+    if (Array.isArray(parts)) for (const part of parts) if (part && typeof part === 'object') add(part);
+    return output;
   }
 
   function messageText(message) {
@@ -121,7 +156,10 @@
       let text = messageText(message);
       if (!text && message.status === 'in_progress') text = '（回答生成中）';
       if (!text) continue;
-      messages.push({id, nodeId: entry.nodeId, role: message.author.role, text,
+      const bodyText = bodyPart(message.content).replace(/\u200B/g, '').trim();
+      const attachments = attachmentInfo(message);
+      const matchTexts = [bodyText, text].filter((value, index, values) => value && values.indexOf(value) === index);
+      messages.push({id, nodeId: entry.nodeId, role: message.author.role, text, bodyText, matchTexts, attachments,
         headings: parseHeadings(text, id),
         createTime: typeof message.create_time === 'number' ? message.create_time : null,
         status: typeof message.status === 'string' ? message.status : ''});

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT-Mini-Map",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "完整读取当前 ChatGPT 对话分支，保留全部提问与回答、全文搜索和离屏消息跳转。",
   "permissions": [
     "storage"

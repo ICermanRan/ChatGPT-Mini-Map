@@ -40,7 +40,7 @@
   let bridgePingId = '';
   let bridgeTimer = 0;
   let lastSource = '';
-  const extensionVersion = '1.3.5';
+  const extensionVersion = '1.3.6';
   let conversationId = '';
   let pendingRequest = null;
   let requestTimer = 0;
@@ -67,7 +67,7 @@
   }
 
   function debugNode(node, role, candidates, record) {
-    const content = node ? contentFor(node) : null;
+    const content = node ? contentFor(node, role, record?.bodyText || record?.text || '') : null;
     const text = textFor(content || node);
     const rect = node?.getBoundingClientRect?.();
     const attrs = ['data-message-author-role', 'data-message-id', 'data-message-uuid', 'data-chatgpt-search-unit-key', 'data-chatgpt-search-message-ids', 'data-turn', 'data-testid'];
@@ -77,6 +77,8 @@
       candidateCount: candidates?.length || 0,
       candidateIndexes: (candidates || []).map(item => records.indexOf(item)).filter(index => index >= 0).slice(0, 12),
       matchedIndex: record ? records.indexOf(record) : -1,
+      bodyTextLength: typeof record?.bodyText === 'string' ? record.bodyText.length : null,
+      attachmentKinds: Array.isArray(record?.attachments) ? record.attachments.map(item => item?.kind).filter(Boolean).slice(0, 8) : [],
       connected: !!node?.isConnected, display: node ? getComputedStyle(node).display : null,
       top: rect ? Math.round(rect.top) : null, height: rect ? Math.round(rect.height) : null
     };
@@ -383,7 +385,14 @@
     return (node.innerText || node.textContent || '').replace(/\u200B/g, '').trim();
   }
 
-  function contentFor(message) {
+  function contentFor(message, role, expectedText) {
+    const pageBody = globalThis.CGMapPage?.bodyFor;
+    if (typeof pageBody === 'function') {
+      try {
+        const body = pageBody(message, role || globalThis.CGMapPage?.roleFor?.(message), expectedText || '');
+        if (body) return body;
+      } catch { /* Fall back to the stable selectors below. */ }
+    }
     return message.querySelector('.markdown, [data-markdown-text-style="assistant-message"], .whitespace-pre-wrap, [data-message-content], [data-chatgpt-search-message-content]') || message;
   }
 
@@ -397,7 +406,7 @@
     const main = globalThis.CGMapPage?.conversationRoot?.() || document.querySelector('main') || document.body;
     if (!main) return [];
     const discovered = globalThis.CGMapPage?.messageRows?.(main) || [];
-    let legacy = discovered.map(row => ({ node: row.identityNode || row.node, role: row.role }));
+    let legacy = discovered.map(row => ({ node: row.identityNode || row.node, bodyTarget: row.node, role: row.role }));
     const overlaps = (a, b) => a === b || a.contains(b) || b.contains(a);
     // Full API records also identify messages on layouts with no legacy attributes.
     // Keep all records available to the locator so quoted/repeated text stays ambiguous.
@@ -496,6 +505,26 @@
       : normalized(text);
   }
 
+  function recordMatchTexts(record) {
+    const values = [];
+    const source = [record?.bodyText, record?.text].concat(Array.isArray(record?.matchTexts) ? record.matchTexts : []);
+    for (const value of source) if (typeof value === 'string' && value.trim() && !values.includes(value)) values.push(value);
+    return values;
+  }
+
+  function attachmentCompatible(rendered, record, role) {
+    const body = role === 'user' ? messageTextKey(record?.bodyText, role) : '';
+    if (role !== 'user' || !body || !rendered.includes(body)) return false;
+    let remainder = rendered.replace(body, '').trim();
+    const names = Array.isArray(record.attachments)
+      ? record.attachments.flatMap(item => [item?.name, item?.filename]).filter(value => typeof value === 'string' && value.trim())
+      : [];
+    for (const token of ['[图片]', '[图像]', '[音频]', '[视频]', '[文件]', '[附件]', '图片', '图像', '音频', '视频', '附件', ...names]) {
+      if (token) remainder = remainder.split(token).join('').trim();
+    }
+    return !remainder;
+  }
+
   function recordCandidates(node, role) {
     const id = domId(node);
     if (id) {
@@ -505,11 +534,22 @@
       // the complete rendered body as the second, exact identity check.
       if (byId.length) return byId;
     }
-    const text = messageTextKey(textFor(contentFor(node)), role);
-    if (!text) return [];
+    const text = messageTextKey(textFor(contentFor(node, role)), role);
     const sameRole = records.filter(record => record.role === role);
-    const exact = sameRole.filter(record => messageTextKey(record.text, role) === text);
+    if (!text && role === 'user') {
+      const hasAttachmentNode = !!node.querySelector?.('img,video,audio,[data-testid*="attachment"],[data-file],[download],input[type="file"]');
+      const attachmentOnly = sameRole.filter(record => !record.bodyText && Array.isArray(record.attachments) && record.attachments.length);
+      if (hasAttachmentNode && attachmentOnly.length === 1) return attachmentOnly;
+      return [];
+    }
+    if (!text) return [];
+    const exact = sameRole.filter(record => recordMatchTexts(record).some(value => messageTextKey(value, role) === text) || attachmentCompatible(text, record, role));
     if (exact.length) return exact;
+    if (role === 'user') {
+      const attachmentNode = !!(node.matches?.('img,video,audio,[data-testid*="attachment"],[data-file],[download],input[type="file"]') || node.querySelector?.('img,video,audio,[data-testid*="attachment"],[data-file],[download],input[type="file"]'));
+      const attachmentOnly = sameRole.filter(record => !record.bodyText && Array.isArray(record.attachments) && record.attachments.length);
+      if (attachmentNode && attachmentOnly.length === 1) return attachmentOnly;
+    }
     // A rendered answer can be shortened by citation/tool decorations or a
     // collapsed body even after generation finished. Require a substantial,
     // unique prefix overlap before accepting that answer as an anchor.
@@ -679,6 +719,8 @@
       host: location.hostname, routeType: currentConversationId() ? 'conversation' : 'new-chat',
       projectOrCustomGPT: /^\/g\//.test(location.pathname),
       indexedMessages: messageCount, visibleMessages: mounted.length,
+      attachmentMessages: records.filter(record => Array.isArray(record.attachments) && record.attachments.length).length,
+      attachmentKinds: Array.from(new Set(records.flatMap(record => Array.isArray(record.attachments) ? record.attachments.map(item => item?.kind).filter(Boolean) : []))).slice(0, 12),
       documentState: document.readyState, hasMain: !!main,
       mainTextCharacters: (main?.textContent || '').length,
       embeddedFrames: main?.querySelectorAll('iframe').length || 0,
@@ -809,7 +851,7 @@
       const result = globalThis.CGMapModel.parseConversation(data);
       const returnedIds = new Set(result.messages.flatMap(record => [record.id, record.nodeId]));
       const textCounts = new Map();
-      const keyOf = item => item.role + ':' + messageTextKey(item.text, item.role);
+      const keyOf = item => item.role + ':' + messageTextKey(item.bodyText || item.text, item.role);
       for (const message of result.messages) { const key = keyOf(message); textCounts.set(key, (textCounts.get(key) || 0) + 1); }
       const missingObservation = addedIds.some(observation => {
         if (typeof observation === 'string') return !returnedIds.has(observation);
@@ -879,7 +921,7 @@
     let changed = false;
     for (const row of messages) {
       const { node, role } = row;
-      const content = contentFor(node);
+      const content = contentFor(node, role, row.record?.bodyText || row.record?.text || '');
       const text = textFor(content);
       let record = row.record;
       if (!record && merge && row.source !== 'content' && row.candidates.length === 0) {
@@ -902,7 +944,8 @@
         if (record.text !== text) { record.text = text; changed = true; scheduleRefresh(); }
         record.headings = Array.from(content.querySelectorAll('h1,h2,h3')).filter(h => !h.closest('pre,code,[hidden],[aria-hidden="true"]')).map((h, i) => ({ id: 'dom-h-' + i, text: textFor(h), level: Number(h.tagName.slice(1)) }));
       }
-      mounted.push({ record, target: node });
+      const bodyTarget = content && content !== node && content.isConnected && content.getClientRects?.().length ? content : null;
+      mounted.push({ record, target: node, bodyTarget });
     }
     if (changed && !complete) {
       // Stable DOM turn IDs order the fallback cache; unlike v1, unmounted nodes stay indexed.

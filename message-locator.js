@@ -54,7 +54,7 @@
     const source = records.filter(record => record && (record.role === 'user' || record.role === 'assistant') && typeof record.id === 'string' && typeof record.text === 'string');
     if (cachedModel && source.length === cachedModel.snapshot.length && source.every((record, index) => {
       const old = cachedModel.snapshot[index];
-      return record === old.record && record.id === old.id && record.role === old.role && record.text === old.text;
+      return record === old.record && record.id === old.id && record.role === old.role && record.text === old.text && record.bodyText === old.bodyText;
     })) return cachedModel;
     const index = new Map();
     const assistantTexts = [];
@@ -67,15 +67,15 @@
       index.set(key, values);
     };
     for (const record of source) {
-      const key = textKey(record.text);
-      add(key, record);
+      const variants = [record.bodyText, record.text].concat(Array.isArray(record.matchTexts) ? record.matchTexts : []);
+      for (const value of variants) add(textKey(value), record);
       if (record.role === 'assistant') {
         const rendered = renderedMarkdown(record.text);
         add(rendered, record);
         assistantTexts.push(rendered);
       }
     }
-    cachedModel = { index, assistantTexts, maximumLength, records: source, indices: new Map(source.map((record, index) => [record.id, index])), snapshot: source.map(record => ({ record, id: record.id, role: record.role, text: record.text })) };
+    cachedModel = { index, assistantTexts, maximumLength, records: source, indices: new Map(source.map((record, index) => [record.id, index])), snapshot: source.map(record => ({ record, id: record.id, role: record.role, text: record.text, bodyText: record.bodyText })) };
     return cachedModel;
   }
 

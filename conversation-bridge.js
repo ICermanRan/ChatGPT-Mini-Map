@@ -472,7 +472,7 @@
     if (!message || message.source !== requestSource || typeof message.requestId !== 'string' || !message.requestId || message.requestId.length > 160) return;
     syncRoute();
     if (message.type === 'bridge-ping') {
-      window.postMessage({source: responseSource, type: 'bridge-ready', requestId: message.requestId, version: '1.3.5', routeSupported: currentConversationId() !== null}, pageOrigin);
+      window.postMessage({source: responseSource, type: 'bridge-ready', requestId: message.requestId, version: '1.3.6', routeSupported: currentConversationId() !== null}, pageOrigin);
       return;
     }
     if (message.type === 'conversation-cancel') {

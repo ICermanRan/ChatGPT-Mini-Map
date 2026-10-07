@@ -261,12 +261,16 @@
         const mounted = snapshot();
         const found = mounted.find(item => keyFor(item.record) === targetKey);
         if (!found) return { ok: false, retry: true };
-        const headingTarget = matchingHeading(found.target, heading);
+        // Attachment cards can be taller than the actual question. Keep the
+        // message marker for virtualization/container ownership, but align the
+        // visible text body when one was identified by content.js.
+        const bodyTarget = found.bodyTarget && found.bodyTarget.isConnected ? found.bodyTarget : null;
+        const headingTarget = matchingHeading(bodyTarget || found.target, heading);
         if (!headingTarget && ++missingHeading <= 4) {
           await waitForRender(140, signal);
           continue;
         }
-        const destination = headingTarget || found.target;
+        const destination = headingTarget || bodyTarget || found.target;
         lastMountedTarget = found.target;
         const currentContainer = chooseContainer([found, ...mounted.filter(item => item !== found)], findScrollContainer, blockedContainers);
         const viewport = readViewport(currentContainer, viewportFor);
@@ -299,6 +303,7 @@
         const aligned = Math.abs(delta) <= ALIGN_TOLERANCE || (limitedByEdge && anchorVisible);
         const unchanged = previous && previous.container === currentContainer && Math.abs(previous.scrollTop - top) <= 3 && Math.abs(previous.anchorTop - rect.top) <= 3;
         traceStep({phase: 'positioning', attempt, mounted: mounted.length, found: true, aligned, anchorVisible,
+          anchorKind: headingTarget ? 'heading' : bodyTarget ? 'body' : 'message',
           top: Math.round(top), extent: Math.round(extent), anchorTop: Math.round(rect.top),
           viewportTop: Math.round(viewport.top), viewportHeight: Math.round(viewport.height),
           delta: Math.round(delta), requested: Math.round(requested), unchanged: !!unchanged,
@@ -394,7 +399,7 @@
           }
         }
 
-        if (alignmentStarted && performance.now() - alignmentStarted >= ALIGN_TIME_MS) return { ok: false, reason: 'position-not-stable' };
+        if (alignmentStarted && performance.now() - alignmentStarted >= ALIGN_TIME_MS) return { ok: false, reason: 'position-not-stable', debug: debugState() };
         if (found) {
           const result = await alignTarget(attempt);
           if (!result.retry) return result;
